@@ -1,0 +1,226 @@
+# REFINED TASK SPEC: Multi-Agent FastAPI Repository Chat (MCP)
+
+## Objective
+Build a submission-ready multi-agent system that answers questions about the FastAPI repo (https://github.com/fastapi/fastapi) using **MCP servers**, a **Neo4j knowledge graph**, and a **FastAPI gateway**—all startable with `docker compose up`.
+
+**Design principle:** Meet the assignment rubric first; optimize for reviewer demo second (pre-seeded graph, optional Groq).
+
+---
+
+## 0. Alignment With ass.md (Non-Negotiable vs Optional)
+
+| Requirement (ass.md) | Approach |
+|----------------------|----------|
+| Neo4j knowledge graph | **Keep Neo4j** as a Compose service; Graph Query Agent uses official Neo4j async driver + parameterized Cypher |
+| Five MCP servers | **Four domain agents** (listed in spec) + **Memory Agent** (5th); Gateway is **not** an MCP server |
+| MCP protocol | Each agent = separate process, `FastMCP` tools matching required names/signatures |
+| Conversation memory | Memory Agent + Orchestrator `get_conversation_context` |
+| Docker | **One Dockerfile per MCP server + gateway**; Compose healthchecks and `depends_on` with conditions |
+| Groq / NetworkX | **Optional enhancements**—document in README trade-offs; do not replace Neo4j for grading |
+
+---
+
+## 1. Agent Topology (5 MCP Servers + Gateway)
+
+```
+User → FastAPI Gateway (HTTP/WS, MCP client only)
+         → Orchestrator MCP (stdio or streamable HTTP)
+              ├─ Memory MCP
+              ├─ Indexer MCP
+              ├─ Graph Query MCP → Neo4j
+              └─ Code Analyst MCP (reads repo files + graph IDs from Graph Query)
+```
+
+### Memory Agent (5th server)
+**Why:** ass.md lists four named agents but asks for five MCP servers and shared "Conversation Memory."
+
+**Responsibilities:** Session history, routing decision log, agent output cache, user context.
+
+**MCP tools (minimum):**
+- `save_turn` — persist user/assistant message
+- `get_session_history` — last N turns for a session
+- `cache_agent_result` / `get_cached_result` — keyed by (session, tool, args hash)
+- `record_routing_decision` — audit trail for demo/walkthrough
+
+Orchestrator's required `get_conversation_context` **calls Memory Agent**, not only local SQLite in orchestrator.
+
+### Required agents 1–4 (tool names must match ass.md)
+Implement exactly the tool sets listed in the assignment for Orchestrator, Indexer, Graph Query, and Code Analyst.
+
+**Orchestrator execution model:**
+1. `analyze_query` — LLM or rules + entities (class/function/module names)
+2. `route_to_agents` — plan: `{ parallel: [...], sequential: [...], fallback: [...] }`
+3. Execute plan via MCP client calls (asyncio.gather for parallel steps)
+4. `synthesize_response` — LLM merges structured JSON from agents; cite graph entity IDs / file paths
+5. On agent timeout/failure: retry once → degraded answer from successful agents → explicit "partial result"
+
+**Indexer:** Clone to `data/repos/fastapi/` (volume-mounted). Full + incremental via file mtime/git hash. Populate Neo4j with MERGE on stable IDs (`file_path#QualifiedName`).
+
+**Graph Query:** Parameterized Cypher only; `execute_query` allowlist (read-only, block `DETACH DELETE`, `CREATE`, `DROP`, `CALL dbms.*`).
+
+**Code Analyst:** Repo path + graph pointers; `get_code_snippet` reads disk with line ranges from indexer metadata.
+
+---
+
+## 2. Neo4j Schema
+
+**Nodes:** Module, Class, Function, Method, Parameter, Decorator, Import, Docstring, File  
+**Relationships:** CONTAINS, IMPORTS, INHERITS_FROM, CALLS, DECORATED_BY, HAS_PARAMETER, DOCUMENTED_BY, DEPENDS_ON
+
+**Indexes/constraints:** Unique on File.path, Class.fqn, Function.fqn, etc.
+
+**Bootstrap:** Ship `data/neo4j-seed/` or `scripts/seed_graph.py` + optional dump so first `docker compose up` works before manual index. README: first run loads seed; POST /api/index refreshes.
+
+**Optional dev shortcut:** NetworkX `LocalGraphStore` behind an interface for **unit tests only**—production always Neo4j.
+
+---
+
+## 3. LLM Layer (Groq default, swappable)
+
+- Settings: `LLM_PROVIDER`, `GROQ_API_KEY`, models (`llama-3.3-70b-versatile` synthesis, `llama-3.1-8b-instant` routing)
+- Without API key: deterministic routing + template synthesis from agent JSON; graph-heavy queries still work
+- Routing/synthesis prompts use JSON schema validated with Pydantic
+
+---
+
+## 4. Gateway (FastAPI—not an MCP server)
+
+**Endpoints:**
+- `POST /api/chat` — `session_id`, `message`; optional `stream: true` → SSE or chunked JSON
+- `WebSocket /ws/chat` — stream events (`agent_start`, `agent_done`, `final`)
+- `POST /api/index` — `{ mode: "full" | "incremental" }` → `job_id`
+- `GET /api/index/status/{job_id}`
+- `GET /api/agents/health` — ping each MCP server + Neo4j
+- `GET /api/graph/statistics` — Cypher aggregates (counts by label)
+
+**Gateway:** optional API key header, correlation ID (`X-Request-ID`) on all MCP calls and logs, MCP client pool per agent URL.
+
+---
+
+## 5. Configuration
+
+- Per-service `pydantic-settings`: orchestrator, indexer, graph_query, code_analyst, memory + shared Neo4j/repo settings
+- `APP_ENV=development|testing|production` — log levels, timeouts
+- `.env.example` with all vars, no secrets
+- Configurable per-agent timeouts and retries (e.g. 30s graph, 120s index chunk)
+
+---
+
+## 6. Observability and Errors
+
+- Structured logging: `correlation_id`, `session_id`, `agent`, `tool`, `duration_ms`
+- Exceptions: `AgentError` → OrchestratorError, IndexingError, GraphQueryError, AnalysisError, MemoryError
+- MCP failures → HTTP 502/504; no stack traces to client
+
+---
+
+## 7. Repository Layout
+
+```
+fastapi-mcp-agent/
+├── docker/
+│   ├── Dockerfile.gateway
+│   ├── Dockerfile.orchestrator
+│   ├── Dockerfile.indexer
+│   ├── Dockerfile.graph_query
+│   ├── Dockerfile.code_analyst
+│   └── Dockerfile.memory
+├── docker-compose.yml
+├── data/
+│   ├── neo4j-seed/
+│   └── repos/
+├── scripts/
+│   ├── seed_graph.py
+│   └── run_index.py
+├── src/
+│   ├── shared/
+│   │   ├── config/
+│   │   ├── logging.py
+│   │   ├── exceptions.py
+│   │   ├── mcp_client.py
+│   │   └── models/
+│   ├── graph/
+│   │   ├── schema.cypher
+│   │   ├── neo4j_client.py
+│   │   └── parser.py
+│   ├── agents/
+│   │   ├── orchestrator/server.py
+│   │   ├── indexer/server.py
+│   │   ├── graph_query/server.py
+│   │   ├── code_analyst/server.py
+│   │   └── memory/server.py
+│   └── gateway/
+│       ├── main.py
+│       ├── routes/
+│       └── schemas.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── contract/
+├── pyproject.toml
+├── .env.example
+└── README.md
+```
+
+---
+
+## 8. Docker Compose
+
+Services: neo4j, orchestrator, indexer, graph-query, code-analyst, memory, gateway.  
+Expose gateway (+ Neo4j browser in dev only).  
+MCP: streamable HTTP on internal network.  
+Healthchecks on each agent; Neo4j ready check before indexers/graph-query start.
+
+---
+
+## 9. Complex Query Flow (example)
+
+Query: "Explain dependency injection and show examples"
+
+1. `analyze_query` → intent explain+examples, entities Depends, dependency injection
+2. `route_to_agents` → parallel Graph Query (find_entity, get_dependents) + Code Analyst (find_patterns, get_code_snippet); Memory get_session_history
+3. Graph Query returns FQNs/paths → Code Analyst snippets
+4. `synthesize_response` → narrative + code blocks
+5. Memory save_turn + cache for follow-ups
+
+---
+
+## 10. Testing (>70% coverage target)
+
+- Unit: AST parser, Cypher builders, execute_query sanitizer, routing without LLM
+- Integration: index fixture file → Neo4j node counts
+- Gateway: TestClient + mock MCP
+- ass.md sample queries as slow integration tests
+
+---
+
+## 11. README / Walkthrough
+
+- Mermaid architecture (ass.md flow + Memory Agent)
+- Per-agent tools, env vars, failure behavior
+- Trade-offs: MCP transport, schema IDs, incremental index, LLM optional
+- Limitations: CALLS edges may need pass-2 static analysis
+- Demo: index status → simple → medium → complex queries with multi-agent logs
+
+---
+
+## 12. Deliverables Checklist
+
+- [ ] 5 MCP servers with exact required tool names (plus Memory tools above)
+- [ ] Neo4j schema + Graph Query tools
+- [ ] Gateway endpoints + WS streaming
+- [ ] Per-service Dockerfiles + one-command Compose
+- [ ] Pydantic settings, types, exceptions, correlation logging
+- [ ] Tests + coverage documented
+- [ ] .env.example, README, no TODO placeholders
+
+---
+
+## 13. Changes From Your Original sol.txt
+
+1. **Neo4j** replaces NetworkX as primary store (NetworkX tests-only optional).
+2. **5th agent = Memory**; Gateway is not counted as MCP server #5.
+3. **Multi-Dockerfile** layout for production readiness rubric.
+4. **Orchestrator** parallel/sequential plan, retries, partial responses.
+5. **POST streaming** + WebSocket specified.
+6. **Pre-seeded Neo4j** keeps out-of-the-box demos without skipping Neo4j.
