@@ -1,0 +1,130 @@
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
+      NEO4J_PLUGINS: '[]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "neo4j status || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.agents.orchestrator_server
+    environment: &agent_env
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 9001
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
+      NEO4J_DATABASE: neo4j
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      MCP_MEMORY_URL: http://memory:9005/mcp
+      LOG_LEVEL: INFO
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      memory:
+        condition: service_started
+    ports:
+      - "9001:9001"
+
+  indexer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.agents.indexer_server
+    environment:
+      <<: *agent_env
+      MCP_PORT: 9002
+      FASTAPI_REPO_PATH: /data/repos/fastapi
+    volumes:
+      - ./data:/data
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "9002:9002"
+
+  graph-query:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.agents.graph_query_server
+    environment:
+      <<: *agent_env
+      MCP_PORT: 9003
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "9003:9003"
+
+  code-analyst:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.agents.code_analyst_server
+    environment:
+      <<: *agent_env
+      MCP_PORT: 9004
+      FASTAPI_REPO_PATH: /data/repos/fastapi
+    volumes:
+      - ./data:/data
+    depends_on:
+      indexer:
+        condition: service_started
+    ports:
+      - "9004:9004"
+
+  memory:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.agents.memory_server
+    environment:
+      <<: *agent_env
+      MCP_PORT: 9005
+      MEMORY_DB_PATH: /data/memory/sessions.db
+    volumes:
+      - ./data:/data
+    ports:
+      - "9005:9005"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: python -m opsly.gateway.main
+    environment:
+      <<: *agent_env
+      GATEWAY_PORT: 8000
+      MCP_ORCHESTRATOR_URL: http://orchestrator:9001/mcp
+      MCP_INDEXER_URL: http://indexer:9002/mcp
+      MCP_GRAPH_QUERY_URL: http://graph-query:9003/mcp
+      MCP_CODE_ANALYST_URL: http://code-analyst:9004/mcp
+      MCP_MEMORY_URL: http://memory:9005/mcp
+      FASTAPI_REPO_PATH: /data/repos/fastapi
+    volumes:
+      - ./data:/data
+    depends_on:
+      - orchestrator
+      - indexer
+      - graph-query
+      - code-analyst
+      - memory
+    ports:
+      - "8000:8000"
+
+volumes:
+  neo4j_data:

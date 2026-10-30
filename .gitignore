@@ -77,7 +77,8 @@ docs/_build/
 target/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
 
 # IPython
 profile_default/
@@ -149,8 +150,17 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# Local secrets (never commit)
+keys.txt
+secrets/
+*.pem
+*.key
+
 # Environments
 .env
+.env.local
+.env.*.local
+!.env.example
 .envrc
 .venv
 env/
@@ -196,12 +206,8 @@ cython_debug/
 #   Learn more at https://abstra.io/docs
 .abstra/
 
-# Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore that
-#   can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, you
-#   could uncomment the following to ignore the entire vscode folder
-# .vscode/
+# Visual Studio Code (local editor settings)
+.vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
@@ -218,3 +224,41 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- opsly-assgn: generated / local (not for git) ---
+# Cloned FastAPI repo, Neo4j dumps, session DB, index artifacts
+data/*
+!data/.gitkeep
+
+# SQLite / local DBs (memory agent, dev)
+*.sqlite
+*.sqlite3
+*.db
+!**/.gitkeep
+
+# Neo4j / Docker local volumes
+neo4j/
+neo4j-data/
+*.dump
+
+# Logs and scratch
+logs/
+*.log
+scratch/
+tmp/
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Editors (keep .vscode/settings.json if you commit it; ignore personal IDE state)
+.idea/
+*.swp
+*.swo
+*~
+
+# Cursor local state (if created inside repo)
+.cursor/
+
