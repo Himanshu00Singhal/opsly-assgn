@@ -63,7 +63,7 @@ def build_server() -> MCPServer:
         outputs = json.loads(agent_outputs_json)
         prompt = (
             f"User question: {message}\n\nAgent data:\n{json.dumps(outputs)[:6000]}\n\n"
-            "Write a helpful answer for a FastAPI codebase question."
+            "Short answer about the FastAPI source; cite file paths from the JSON."
         )
         text = groq_chat(prompt, purpose="synthesis")
         if not text:

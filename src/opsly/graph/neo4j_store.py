@@ -89,6 +89,7 @@ class Neo4jGraphStore:
         path = row.get("path") or ""
         typ = row.get("type") or ""
         nm = row.get("name") or ""
+        # Prefer library code over tests/ when names fuzzy-match (e.g. Depends vs test_*_depends).
         test_penalty = 100 if path.startswith("tests/") or "/test_" in path else 0
         type_rank = {"Function": 0, "Class": 1, "Method": 2, "Module": 3}.get(typ, 8)
         if nm == name:

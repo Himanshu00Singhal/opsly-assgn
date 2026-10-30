@@ -1,3 +1,3 @@
-"""Opsly assignment package (MCP multi-agent system)."""
+# opsly-assgn package
 
 __version__ = "0.1.0"

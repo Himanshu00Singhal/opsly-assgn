@@ -1,7 +1,7 @@
 [project]
 name = "opsly-assgn"
 version = "0.1.0"
-description = "Multi-agent MCP system for FastAPI repository chat"
+description = "Opsly assignment — MCP agents + Neo4j over the FastAPI repo"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [

@@ -1,4 +1,4 @@
-"""Groq LLM helpers with deterministic fallback."""
+# Query routing + answer templates when Groq isn't configured.
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def synthesize_template(message: str, agent_outputs: dict[str, Any]) -> str:
             doc = hit.get("docstring") or "(no docstring indexed)"
             return f"**Class {hit.get('name')}** — `{hit.get('path')}`\n\n{doc}"
 
-    parts = [f"Answer for: {message}", ""]
+    parts = [message, ""]
     for key, value in agent_outputs.items():
         if key == "graph_find_entity" and isinstance(value, list):
             parts.append(f"## {key} (top 3)")

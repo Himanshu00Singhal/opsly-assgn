@@ -1,4 +1,4 @@
-"""Preflight checks before building the MCP multi-agent assignment."""
+# Checks env + imports for the notebook / local dev.
 
 from __future__ import annotations
 

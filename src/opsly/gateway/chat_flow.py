@@ -1,4 +1,4 @@
-"""Multi-agent chat orchestration via MCP."""
+# Chat path: orchestrator tools for plan + synthesis; gateway executes graph/code MCP calls.
 
 from __future__ import annotations
 

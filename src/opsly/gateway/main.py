@@ -1,4 +1,4 @@
-"""FastAPI gateway."""
+# HTTP entrypoint — not an MCP server; calls agents via mcp_client.
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from opsly.shared.logging import bind_context, configure_logging
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="FastAPI Repo Chat Gateway", version="0.1.0")
+app = FastAPI(title="opsly-assgn gateway", version="0.1.0")
 
 
 @app.on_event("startup")

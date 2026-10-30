@@ -1,6 +1,6 @@
-# opsly-assgn — Engineering guide (problem → solution → how it works)
+# opsly-assgn — design notes
 
-This document is written for someone new to the project: reviewers, teammates, or future you. It moves from **why the system exists** to **how each piece runs**, including **problems we hit** and **why we fixed them the way we did**.
+Notes I wrote while building the assignment: what the spec asked for, how the pieces connect, curl examples, and bugs (MCP streams, Depends ranking in tests, etc.). For “just run it” see [`HOW_TO_USE.md`](../HOW_TO_USE.md).
 
 Related files:
 

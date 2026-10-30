@@ -1,12 +1,12 @@
-# How to use opsly-assgn
+# How to run opsly-assgn
 
-Single guide for **reviewers and new developers**: run the stack, index FastAPI, chat, verify, and optional local dev.
+FastAPI take-home: five MCP agents, Neo4j graph, gateway on port 8000. Tested on **Docker Desktop (Mac)** with Python **3.12** for unit tests.
 
-**Requirements:** Docker Desktop (or Docker Engine + Compose), ~4 GB free disk for Neo4j + FastAPI clone after index.
+Need Docker + a few GB free once the FastAPI repo is cloned under `data/repos/`.
 
 ---
 
-## 1. Clone and configure
+## Setup
 
 ```bash
 git clone git@github.com:Himanshu00Singhal/opsly-assgn.git
@@ -14,37 +14,37 @@ cd opsly-assgn
 cp .env.example .env
 ```
 
-Edit `.env`:
+For Compose, set **`NEO4J_PASSWORD`** in `.env` (default `changeme` in the example is fine for local). Leave **`NEO4J_URI`** empty — containers talk to `bolt://neo4j:7687` on the compose network.
 
-| Variable | Docker Compose (recommended) | Notes |
-|----------|----------------------------|--------|
-| `NEO4J_PASSWORD` | Any strong password | Must match Compose Neo4j auth |
-| `NEO4J_URI` | **Remove or comment** — Compose sets `bolt://neo4j:7687` inside containers | Do not point Compose at Aura unless you know what you are doing |
-| `GROQ_API_KEY` | Optional | Better prose; without it, rule-based routing + templates still work |
+`GROQ_API_KEY` is optional. Without it I still get answers via regex routing + markdown templates (Groq just reads nicer on compare/explain questions).
 
-For local-only secrets you can run `scripts/bootstrap_env.sh` if you have a **local** `keys.txt` (never commit it).
+If you keep secrets in `keys.txt` locally: `scripts/bootstrap_env.sh` writes `.env` — never commit either file.
 
 ---
 
-## 2. Start all services
+## Start stack
 
 ```bash
 docker compose up --build -d
 ```
 
-Wait ~30–60 seconds, then check health:
+Give Neo4j ~30s on first boot, then:
 
 ```bash
 curl -s http://localhost:8000/api/agents/health | python3 -m json.tool
 ```
 
-Expect `"status": "ok"` and all five agents `"up"` plus `"neo4j": "up"`.
+All agents + `neo4j` should show `"up"`. If not, `docker compose up --build -d` again (MCP client had to match the SDK stream shape — details in `docs/ENGINEERING_GUIDE.md`).
 
-If agents are `"down"`, rebuild: `docker compose up --build -d` (see [docs/ENGINEERING_GUIDE.md](docs/ENGINEERING_GUIDE.md) §13 for MCP fixes).
+Quick smoke test without reading docs:
+
+```bash
+./scripts/dry_run.sh
+```
 
 ---
 
-## 3. Index the FastAPI repository (first time only)
+## Index FastAPI (first time)
 
 ```bash
 curl -s -X POST http://localhost:8000/api/index \
@@ -52,25 +52,25 @@ curl -s -X POST http://localhost:8000/api/index \
   -d '{"mode":"full"}' | python3 -m json.tool
 ```
 
-Copy the **`job_id`** from the response (a UUID). Poll until completed:
+Use the returned **`job_id`** (UUID), not the literal text `YOUR_JOB_ID`:
 
 ```bash
-curl -s "http://localhost:8000/api/index/status/YOUR_JOB_ID_HERE" | python3 -m json.tool
+curl -s "http://localhost:8000/api/index/status/<job_id>" | python3 -m json.tool
 ```
 
-Confirm the graph has data:
+When `status` is `completed`:
 
 ```bash
 curl -s http://localhost:8000/api/graph/statistics | python3 -m json.tool
 ```
 
-You should see **thousands** of nodes after a full index. The clone lives at `data/repos/fastapi/` (local only, not in git).
+Expect thousands of nodes. Clone lands in `data/repos/fastapi/` (gitignored). Full index takes a while — go make coffee.
 
-**Time:** First full index can take several minutes.
+Incremental re-run: same POST with `"mode":"incremental"`.
 
 ---
 
-## 4. Ask questions (chat API)
+## Chat
 
 ```bash
 curl -s -X POST http://localhost:8000/api/chat \
@@ -79,81 +79,57 @@ curl -s -X POST http://localhost:8000/api/chat \
   | python3 -m json.tool
 ```
 
-**Good demo questions:**
+Good demo prompts I used:
 
-| Message | What it proves |
-|---------|----------------|
-| `Show me the docstring for the Depends function` | Graph + code analyst; answer cites `fastapi/param_functions.py` |
-| `What is the FastAPI class?` | Class lookup + snippet |
-| `Compare Path and Query parameters in FastAPI` | Compare intent + multiple entities |
+- `Show me the docstring for the Depends function` → should mention `fastapi/param_functions.py`
+- `What is the FastAPI class?`
+- `Compare Path and Query parameters in FastAPI`
 
-Inspect **`meta.steps`** (orchestrator tools) and **`meta.agent_outputs`** (graph + snippet) to show multi-agent flow.
+Open **`meta.steps`** in the JSON if you need to show orchestrator + parallel agents for the rubric. **`meta.agent_outputs`** has the raw graph hits and snippet.
 
-**Same session, follow-up:** reuse `"session_id"` — history is stored in the Memory agent (SQLite under `data/memory/`).
-
-**WebSocket:** connect to `ws://localhost:8000/ws/chat`, send `{"session_id":"demo","message":"..."}`.
-
-**Streaming HTTP:** add `"stream": true` to the chat JSON body.
+Same **`session_id`** keeps history in SQLite (`data/memory/`). WebSocket: `ws://localhost:8000/ws/chat`. SSE: add `"stream": true` to the POST body.
 
 ---
 
-## 5. Run unit tests (optional, local Python)
+## Tests (local venv)
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest tests/unit -q
 ```
 
-Preflight checks: open `notebooks/00_requirements_check.ipynb` (Jupyter) or import `opsly.preflight`.
+Notebook: `notebooks/00_requirements_check.ipynb`.
 
 ---
 
-## 6. Stop and clean up
+## Stop
 
 ```bash
-docker compose down          # keep Neo4j volume
-docker compose down -v       # also delete Neo4j data volume
+docker compose down      # keeps neo4j volume
+docker compose down -v   # wipes graph volume
 ```
 
 ---
 
-## Ports reference
+## Ports
 
-| Service | Port |
-|---------|------|
-| Gateway (API) | 8000 |
-| Orchestrator MCP | 9001 |
-| Indexer MCP | 9002 |
-| Graph Query MCP | 9003 |
-| Code Analyst MCP | 9004 |
-| Memory MCP | 9005 |
-| Neo4j Browser | 7474 |
-| Neo4j Bolt | 7687 |
-
----
-
-## What not to commit
-
-Already in `.gitignore`: `.env`, `keys.txt`, `.venv`, `data/repos/`, `data/memory/*.db`, coverage caches.
+| What | Port |
+|------|------|
+| Gateway | 8000 |
+| Orchestrator | 9001 |
+| Indexer | 9002 |
+| Graph query | 9003 |
+| Code analyst | 9004 |
+| Memory | 9005 |
+| Neo4j browser / bolt | 7474 / 7687 |
 
 ---
 
-## More documentation
+## Docs
 
-| File | Purpose |
-|------|---------|
-| [README.md](README.md) | Architecture summary |
-| [ass.md](ass.md) | Assignment specification |
-| [docs/ENGINEERING_GUIDE.md](docs/ENGINEERING_GUIDE.md) | Deep dive: design, examples, troubleshooting |
+- `README.md` — diagram + one-liner
+- `ass.md` — spec from the assignment
+- `docs/ENGINEERING_GUIDE.md` — how I wired it, bugs I hit, curl examples
 
----
-
-## Submission checklist
-
-- [ ] `docker compose up --build` succeeds on a clean machine
-- [ ] Health endpoint all green
-- [ ] Full index completed; graph statistics non-zero
-- [ ] Chat returns grounded answer for `Depends` docstring
-- [ ] Repo pushed without secrets (no `.env`, no `keys.txt`, no `data/repos/fastapi`)
+Before push: no `.env`, no `keys.txt`, no `data/repos/fastapi` in git.
