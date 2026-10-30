@@ -60,7 +60,7 @@ def load_project_env(root: Path) -> str:
 
 
 def groq_models_to_try(purpose: str = "routing") -> list[str]:
-    """Models to attempt for preflight (routing vs synthesis env vars)."""
+    """Models to try for Groq (routing vs synthesis env vars)."""
     env_key = "GROQ_MODEL_ROUTING" if purpose == "routing" else "GROQ_MODEL_SYNTHESIS"
     preferred = os.getenv(env_key, "").strip()
     ordered: list[str] = []

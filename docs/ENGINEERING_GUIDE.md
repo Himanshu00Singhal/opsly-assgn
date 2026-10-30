@@ -794,12 +794,11 @@ After code changes: **`docker compose up --build`** so containers pick up the cl
 | # | Problem | Symptom | Root cause | Fix / mitigation |
 |---|---------|---------|------------|------------------|
 | 1 | MCP transport | All agents unhealthy | Wrong stream unpack + `isError` | Fix `mcp_client.py`, rebuild |
-| 2 | Notebook preflight | Import errors | `load_project_env` not re-exported | `preflight.py` / import from `env_loader` |
-| 3 | `keys.txt` | dotenv parse failures | Embedded Python in file | Custom parser in `env_loader.py`; gitignore secrets |
-| 4 | Index status 404 | `JOB_ID` literal in URL | Placeholder not replaced | Use UUID from `POST /api/index` response |
-| 5 | Poor Depends answer | Test imports + JSON dump | Ranking + synthesis + snippet binding | §9.3 |
-| 6 | Aura vs Compose Neo4j | Confusing empty graph | Two different URIs | One env per run: local Compose **or** Aura consistently |
-| 7 | Groq model 404 | Synthesis falls back silently | Account model access | Configure working model list in env |
+| 2 | Local env | dotenv parse failures on `keys.txt` | Embedded Python in file | Custom parser in `env_loader.py` |
+| 3 | Index status 404 | `JOB_ID` literal in URL | Placeholder not replaced | Use UUID from `POST /api/index` response |
+| 4 | Poor Depends answer | Test imports + JSON dump | Ranking + synthesis + snippet binding | §9.3 |
+| 5 | Aura vs Compose Neo4j | Confusing empty graph | Two different URIs | One env per run: local Compose **or** Aura consistently |
+| 6 | Groq model 404 | Synthesis falls back silently | Account model access | Configure working model list in env |
 
 ---
 
@@ -815,8 +814,6 @@ Copy [`.env.example`](../.env.example) to `.env`.
 | `FASTAPI_REPO_PATH` | Host vs container path to clone |
 | `MCP_*_URL` | Gateway → agent URLs (set automatically in Compose) |
 | `MEMORY_DB_PATH` | SQLite file for sessions |
-
-**Preflight:** [`notebooks/00_requirements_check.ipynb`](../notebooks/00_requirements_check.ipynb) and [`src/opsly/preflight.py`](../src/opsly/preflight.py) validate Python version, imports, and connectivity.
 
 **Local without full Compose:** Run agents via CLI entrypoints listed in README (orchestrator, indexer, etc.) with Neo4j reachable.
 
@@ -876,7 +873,6 @@ opsly-assgn/
 ├── docker-compose.yml       # Runtime wiring
 ├── docker/Dockerfile        # Shared image
 ├── docs/ENGINEERING_GUIDE.md  # This file
-├── notebooks/00_requirements_check.ipynb
 ├── src/opsly/
 │   ├── gateway/
 │   │   ├── main.py          # HTTP routes, health, index proxy
@@ -899,8 +895,7 @@ opsly-assgn/
 │   │   ├── llm.py           # Rules + Groq + templates
 │   │   └── exceptions.py
 │   ├── mcp_client.py        # MCP HTTP client
-│   ├── env_loader.py        # .env + keys.txt
-│   └── preflight.py
+│   └── env_loader.py        # .env + keys.txt
 ├── tests/unit/              # pytest
 └── data/
     ├── repos/fastapi/       # Cloned target repo (after index)

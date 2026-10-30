@@ -99,8 +99,6 @@ pip install -e ".[dev]"
 pytest tests/unit -q
 ```
 
-Notebook: `notebooks/00_requirements_check.ipynb`.
-
 ---
 
 ## Stop

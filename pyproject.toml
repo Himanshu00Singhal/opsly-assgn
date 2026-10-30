@@ -16,8 +16,6 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "structlog>=24.4.0",
     "aiosqlite>=0.20.0",
-    "pandas>=2.2.3",
-    "jinja2>=3.1.4",
 ]
 
 [project.optional-dependencies]
@@ -27,9 +25,6 @@ dev = [
     "pytest-cov>=6.0.0",
     "mypy>=1.13.0",
     "ruff>=0.8.4",
-    "jupyter>=1.1.1",
-    "ipykernel>=6.29.5",
-    "pandas>=2.2.3",
 ]
 
 [build-system]
@@ -60,7 +55,6 @@ omit = [
     "src/opsly/agents/*",
     "src/opsly/gateway/main.py",
     "src/opsly/gateway/chat_flow.py",
-    "src/opsly/preflight.py",
     "src/opsly/mcp_client.py",
 ]
 
